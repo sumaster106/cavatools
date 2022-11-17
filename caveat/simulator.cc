@@ -25,10 +25,18 @@ option<int> conf_Iways("iways", 4,		"Instruction cache number of ways associativ
 option<int> conf_Iline("iline",	6,		"Instruction cache log-base-2 line size");
 option<int> conf_Irows("irows",	6,		"Instruction cache log-base-2 number of rows");
 
-option<int> conf_Dmiss("dmiss",	15,		"Data cache miss penalty");
-option<int> conf_Dways("dways", 4,		"Data cache number of ways associativity");
-option<int> conf_Dline("dline",	6,		"Data cache log-base-2 line size");
-option<int> conf_Drows("drows",	6,		"Data cache log-base-2 number of rows");
+// Scalar data cache
+option<int> conf_Dsmiss("dsmiss",	15,		"Scalar data cache miss penalty");
+option<int> conf_Dsways("dsways", 4,		"Scalar data cache number of ways associativity");
+option<int> conf_Dsline("dsline",	6,		"Scalar data cache log-base-2 line size");
+option<int> conf_Dsrows("dsrows",	6,		"Scalar data cache log-base-2 number of rows");
+
+// Vector data cache
+option<int> conf_Dvmiss("dvmiss",	7,		"Vector data cache miss penalty");
+option<int> conf_Dvways("dvways", 4,		"Vector data cache number of ways associativity");
+option<int> conf_Dvline("dvline",	6,		"Vector data cache log-base-2 line size");
+option<int> conf_Dvrows("dvrows",	6,		"Vector data cache log-base-2 number of rows");
+
 option<int> conf_cores("cores",	8,		"Maximum number of cores");
 
 option<>    conf_perf( "perf",	"caveat",	"Name of shared memory segment");
@@ -39,15 +47,18 @@ public:
   mem_t(long n);
   void insn_model(long pc);
   long jump_model(long npc, long pc);
-  long load_model( long a,  long pc);
+  long load_model(long a,  long pc);
   long store_model(long a,  long pc);
-  void amo_model(  long a,  long pc);
-  cache_t* dcache() { return &dc; }
+  void amo_model(long a,  long pc);
+  cache_t* dcache_scalar() { return &dc_scalar; }
+  cache_t* dcache_vector() { return &dc_vector; }
   long clock() { return local_time; }
   void print();
 private:
   cache_t ic;
-  cache_t dc;
+  cache_t dc_scalar;
+  cache_t dc_vector;
+  int access_num;
 };
 
 inline void mem_t::insn_model(long pc)
@@ -71,31 +82,61 @@ inline long mem_t::jump_model(long npc, long pc)
 
 inline long mem_t::load_model(long a, long pc)
 {
-  if (!dc.lookup(a)) {
-    inc_dmiss(pc);
-    local_time += dc.penalty();
-    inc_cycle(pc, dc.penalty());
+	//  Even data to the scalar side
+	//fprintf(stderr, "A [%ld] ", a);
+	if (access_num % 2 == 0) {
+		if (!dc_scalar.lookup(a)){
+		  inc_dmiss(pc);
+		  local_time += dc_scalar.penalty();
+		  inc_cycle(pc, dc_scalar.penalty());
+		} 
+	} else {
+		if (!dc_vector.lookup(a)) {
+		  inc_dmiss(pc);
+		  local_time += dc_vector.penalty();
+		  inc_cycle(pc, dc_vector.penalty());
+		 }
   }
+  access_num++;
+  
   return a;
 }
 
 inline long mem_t::store_model(long a, long pc)
 {
-  if (!dc.lookup(a, true)) {
-    inc_dmiss(pc);
-    local_time += dc.penalty();
-    inc_cycle(pc, dc.penalty());
-  }
+	if (access_num % 2 == 0) {
+		if (!dc_scalar.lookup(a, true)) {
+		  inc_dmiss(pc);
+		  local_time += dc_scalar.penalty();
+		  inc_cycle(pc, dc_scalar.penalty());
+		}
+	} else {
+		if (!dc_vector.lookup(a, true)) {
+		  inc_dmiss(pc);
+		  local_time += dc_vector.penalty();
+		  inc_cycle(pc, dc_vector.penalty());
+		}
+	}
+	access_num++;
   return a;
 }
 
 inline void mem_t::amo_model(long a, long pc)
 {
-  if (!dc.lookup(a, true)) {
-    inc_dmiss(pc);
-    local_time += dc.penalty();
-    inc_cycle(pc, dc.penalty());
-  }
+	if (access_num % 2 == 0) {
+		if (!dc_scalar.lookup(a, true)) {
+		  inc_dmiss(pc);
+		  local_time += dc_scalar.penalty();
+		  inc_cycle(pc, dc_scalar.penalty());
+		}
+	} else {
+		if (!dc_vector.lookup(a, true)) {
+			inc_dmiss(pc);
+			local_time += dc_vector.penalty();
+			inc_cycle(pc, dc_vector.penalty());
+		}
+	}
+	access_num++;
 }
 
 class core_t : public mem_t, public hart_t {
@@ -109,7 +150,8 @@ public:
   static core_t* list() { return (core_t*)hart_t::list(); }
   core_t* next() { return (core_t*)hart_t::next(); }
   mem_t* mem() { return static_cast<mem_t*>(this); }
-  cache_t* dcache() { return mem()->dcache(); }
+  cache_t* dcache_scalar() { return mem()->dcache_scalar(); }
+  cache_t* dcache_vector() { return mem()->dcache_vector(); }
 
   long system_clock() { return global_time; }
   long local_clock() { return mem()->clock(); }
@@ -121,16 +163,20 @@ volatile long core_t::global_time;
 mem_t::mem_t(long n)
   : perf_t(n),
     ic("Instruction", conf_Imiss, conf_Iways, conf_Iline, conf_Irows, false),
-    dc("Data",        conf_Dmiss, conf_Dways, conf_Dline, conf_Drows, true)
+    dc_scalar("Scalar Data",        conf_Dsmiss, conf_Dsways, conf_Dsline, conf_Dsrows, true),
+    dc_vector("Vector Data",        conf_Dvmiss, conf_Dvways, conf_Dvline, conf_Dvrows, true)
 		 
 {
   local_time = 0;
+  access_num = 0;
 }
 
 void mem_t::print()
 {
   ic.print();
-  dc.print();
+  dc_scalar.print();
+  dc_vector.print();
+  fprintf(stderr, "%d accesses\n", access_num);
 }
 
 core_t::core_t() : hart_t(mem()), mem_t(number())
@@ -188,8 +234,9 @@ void exitfunc()
 {
   fprintf(stderr, "\n--------\n");
   for (core_t* p=core_t::list(); p; p=p->next()) {
-    fprintf(stderr, "Core [%ld] ", p->tid());
+    fprintf(stderr, "Core [%ld] \n", p->tid());
     p->mem()->print();
+    fprintf(stderr, "\n--------\n");
   }
   fprintf(stderr, "\n");
   status_report();
