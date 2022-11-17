@@ -76,8 +76,8 @@ RV_isa.tmp: parse_spike RV_bits.tmp RVC.bits
 	./parse_spike $(RVINS) RV_bits.tmp RVC.bits > $@
 
 RV_bits.tmp: parse_opcodes
-	./parse_opcodes $(ISAg) > $@
-#	./parse_opcodes $(ISAg) $(ISAv) $(ISAp) > $@
+	./parse_opcodes $(ISAg) $(ISAv) $(ISAp) > $@
+#	./parse_opcodes $(ISAg) > $@
 
 # Cleanup & installation
 
