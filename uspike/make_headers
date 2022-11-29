@@ -108,11 +108,19 @@ for name in opcodes:
         f.write('#include "spike_link.h"\n')
         f.write('long I_{:s}(long pc, mmu_t& MMU, class processor_t* p) {{\n'.format(name.replace('.','_')))
         f.write('  insn_t insn = (long)(*(int{:d}_t*)pc);\n'.format(opcode['len']==2 and 16 or 32))
+        
+        # Adding flag for vector instructions
+        if name[0] == 'v':
+        	f.write('  MMU.set_vector();\n')
         if 'flags' in opcode and 'pc' in opcode['flags']:
             f.write('  long npc = pc + {:d};\n'.format(opcode['len']))
         for line in opcode["exec"].split('\n'):
             if line:
                 f.write('  {:s}\n'.format(line))
+        
+        # Removing flag for vector instructions
+        if name[0] == 'v':
+        	f.write('  MMU.unset_vector();\n')
         if 'flags' in opcode and 'pc' in opcode['flags']:
             f.write('  return npc;\n')
         else:

@@ -58,7 +58,6 @@ private:
   cache_t ic;
   cache_t dc_scalar;
   cache_t dc_vector;
-  int access_num;
 };
 
 inline void mem_t::insn_model(long pc)
@@ -84,7 +83,7 @@ inline long mem_t::load_model(long a, long pc)
 {
 	//  Even data to the scalar side
 	//fprintf(stderr, "A [%ld] ", a);
-	if (access_num % 2 == 0) {
+	if (!is_vectorized()){
 		if (!dc_scalar.lookup(a)){
 		  inc_dmiss(pc);
 		  local_time += dc_scalar.penalty();
@@ -97,14 +96,12 @@ inline long mem_t::load_model(long a, long pc)
 		  inc_cycle(pc, dc_vector.penalty());
 		 }
   }
-  access_num++;
-  
   return a;
 }
 
 inline long mem_t::store_model(long a, long pc)
 {
-	if (access_num % 2 == 0) {
+	if (!is_vectorized()) {
 		if (!dc_scalar.lookup(a, true)) {
 		  inc_dmiss(pc);
 		  local_time += dc_scalar.penalty();
@@ -117,13 +114,12 @@ inline long mem_t::store_model(long a, long pc)
 		  inc_cycle(pc, dc_vector.penalty());
 		}
 	}
-	access_num++;
   return a;
 }
 
 inline void mem_t::amo_model(long a, long pc)
 {
-	if (access_num % 2 == 0) {
+	if (!is_vectorized()) {
 		if (!dc_scalar.lookup(a, true)) {
 		  inc_dmiss(pc);
 		  local_time += dc_scalar.penalty();
@@ -136,7 +132,6 @@ inline void mem_t::amo_model(long a, long pc)
 			inc_cycle(pc, dc_vector.penalty());
 		}
 	}
-	access_num++;
 }
 
 class core_t : public mem_t, public hart_t {
@@ -168,7 +163,6 @@ mem_t::mem_t(long n)
 		 
 {
   local_time = 0;
-  access_num = 0;
 }
 
 void mem_t::print()
@@ -176,7 +170,7 @@ void mem_t::print()
   ic.print();
   dc_scalar.print();
   dc_vector.print();
-  fprintf(stderr, "%d accesses\n", access_num);
+  //fprintf(stderr, "%d accesses\n", access_num);
 }
 
 core_t::core_t() : hart_t(mem()), mem_t(number())
