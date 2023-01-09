@@ -1,40 +1,63 @@
 /*
-  Copyright (c) 2020 Peter Hsu.  All Rights Reserved.  See LICENCE file for details.
+  Scalar Cache.
 */
 
 
 #ifndef CACHE_T
 #define CACHE_T
 
-struct lru_fsm_t {
-  unsigned short way;		// cache way to look up 
-  unsigned short next_state;	// number if hit 
-};
 
-struct tag_t {
-  bool dirty : 1;
-  long addr : 63;
-};
+// Cache element
+struct element {
+	bool valid_bit;		// valid bit of the element
+	bool dirty_bit;		// dirty bit of the element
+	long tag;			// tag of the element
+}
 
-class cache_t {		        // cache descriptor 
-  const char* name;		// for printing 
-  struct lru_fsm_t* fsm;	// LRU state transitions [ways!][ways] 
-  long line;			// line size in bytes 
-  long rows;			// number of rows 
-  long ways;			// number of ways 
-  long lg_line, lg_rows;	// specified in log-base-2 units 
-  long tag_mask;		// = ~((1<<lg_line)-1) 
-  long row_mask;		// row index mask = ((1<<lg_rows)-1) << dc->lg_line 
-  tag_t** tags;			// cache tag array [ways][rows]
-  unsigned short* states;	// LRU state vector [rows] 
-  long* evicted;		// tag of evicted line, 0 if clean, NULL if unwritable 
-  long _penalty;		// cycles to refill line 
-  long _refs, _misses;		// count number of 
-  long _updates, _evictions;	// if writeable
+
+// Cache descriptor
+class cache_t {		       
+	
+	// Constants
+	const int WB_SIZE = 4;							// write buffer size in bytes
+	const int ADDRESS_SIZE = 32;				// address size for elements								-- 32!!
+	const char* name;										// cache name for printing 
+	
+	// Variables
+	int n_rows;													// number of rows
+	int n_ways;													// number of ways
+	int n_sets;													// number of sets
+	long size;													// size in bytes
+	long row_size												// row size in bytes
+	float penalty;											// cache lookup penalty
+	
+	int n_accesses;											// number of accessed elements in the cache
+	int wb_occupation;									// number of elements currently in write buffer
+
+	// Bits
+	int bits_set;												// number of bits in address for set
+	int bits_offset;										// number of bits in address for offset
+	int bits_tag;												// number of bits in address for tag
+	
+	// Data structures
+	//tag_t** tags;												// cache tag array [ways][rows]
+	long write_buffer[WB_SIZE];					// write buffer (queue) with victimized elements to be written in DRAM write_buffer[WB_SIZE]
+	long** lru;													// LRU queue per set lru[n_sets][n_ways]
+	element** s_cache;									// scalar cache itself s_cache[n_sets][n_ways]
+		
+	
+  
   
  public:
-  cache_t(const char* nam, int miss, int w, int lin, int row, bool writeable);
-  bool lookup(long addr, bool write =false);
+ 	
+	cache_t(const char* nam, float penalty, int ways, int sets, int row_size); 
+	bool SC_lookup(long addr, bool write =false);
+  
+  void print(FILE* f = stderr);
+  void show();
+  void flush();
+  
+  /*
   long refs() { return _refs; }
   long misses() { return _misses; }
   long updates() { return _updates; }
@@ -44,6 +67,7 @@ class cache_t {		        // cache descriptor
   void flush();
   void show();
   void print(FILE* f =stderr);
+  */
 };
 
 inline bool cache_t::lookup(long addr, bool write)
