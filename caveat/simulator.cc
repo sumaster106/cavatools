@@ -20,24 +20,42 @@ void operator delete(void*) noexcept;
 
 option<long> conf_Jump("jump",	2,		"Taken branch pipeline flush cycles");
 
-option<int> conf_Imiss("imiss",	15,		"Instruction cache miss penalty");
+// Instruction cache
+option<int> conf_Imiss("imiss",	2, "Instruction cache miss penalty");
+option<int> conf_Iwb_penalty("i_wb_penalty", 1, "Instruction cache WB penalty");
+option<int> conf_Iwbtodram_penalty("i_wbtodram_penalty",	4, "Instructioncache moving 1 block from wB to DRAM penalty");
+option<int> conf_Iways("iways", 4,	"Instruction cache number of ways associativity");
+option<int> conf_Isets("isets",	256,	"Instruction cache number of sets");
+option<int> conf_Irow_size("irowsize",	64,	"Instruction cache row size in bytes");
+/*
+option<int> conf_Imiss("imiss",	7,		"Instruction cache miss penalty");
 option<int> conf_Iways("iways", 4,		"Instruction cache number of ways associativity");
 option<int> conf_Iline("iline",	6,		"Instruction cache log-base-2 line size");
 option<int> conf_Irows("irows",	6,		"Instruction cache log-base-2 number of rows");
+*/
 
 // Scalar data cache
-option<int> conf_Dsmiss("dsmiss",	15,		"Scalar data cache miss penalty");
+option<int> conf_Dsmiss("dsmiss",	2, "Scalar data cache miss penalty");
+option<int> conf_Dswb_penalty("ds_wb_penalty", 1, "Scalar data cache WB penalty");
+option<int> conf_Dswbtodram_penalty("ds_wbtodram_penalty",	4, "Scalar data cache moving 1 block from wB to DRAM penalty");
+option<int> conf_Dsways("dsways", 4,	"Scalar data cache number of ways associativity");
+option<int> conf_Dssets("dssets",	256,	"Scalar data cache number of sets");
+option<int> conf_Dsrow_size("dsrowsize",	64,	"Scalar data cache row size in bytes");
+/*
+option<int> conf_Dsmiss("dsmiss",	7,		"Scalar data cache miss penalty");
 option<int> conf_Dsways("dsways", 4,		"Scalar data cache number of ways associativity");
 option<int> conf_Dsline("dsline",	6,		"Scalar data cache log-base-2 line size");
 option<int> conf_Dsrows("dsrows",	6,		"Scalar data cache log-base-2 number of rows");
-
+*/
+/*
 // Vector data cache
 option<int> conf_Dvmiss("dvmiss",	7,		"Vector data cache miss penalty");
 option<int> conf_Dvways("dvways", 4,		"Vector data cache number of ways associativity");
 option<int> conf_Dvline("dvline",	6,		"Vector data cache log-base-2 line size");
 option<int> conf_Dvrows("dvrows",	6,		"Vector data cache log-base-2 number of rows");
+*/
 
-option<int> conf_cores("cores",	8,		"Maximum number of cores");
+option<int> conf_cores("cores",	4,		"Maximum number of cores");				
 
 option<>    conf_perf( "perf",	"caveat",	"Name of shared memory segment");
 
@@ -51,21 +69,22 @@ public:
   long store_model(long a,  long pc);
   void amo_model(long a,  long pc);
   cache_t* dcache_scalar() { return &dc_scalar; }
-  cache_t* dcache_vector() { return &dc_vector; }
+  //cache_t* dcache_vector() { return &dc_vector; }
   long clock() { return local_time; }
   void print();
 private:
   cache_t ic;
   cache_t dc_scalar;
-  cache_t dc_vector;
+  //cache_t dc_vector;
 };
 
 inline void mem_t::insn_model(long pc)
 {
-  if (!ic.lookup(pc)) {
-    local_time += ic.penalty();
+	int ic_penalty = 0;
+  if (!ic.lookup(pc, ic_penalty)) {
+    local_time += ic_penalty;
     inc_imiss(pc);
-    inc_cycle(pc, ic.penalty());
+    inc_cycle(pc, ic_penalty);
   }
   inc_count(pc);
   inc_cycle(pc);
@@ -83,55 +102,58 @@ inline long mem_t::load_model(long a, long pc)
 {
 	//  Even data to the scalar side
 	//fprintf(stderr, "A [%ld] ", a);
+	int dcs_penalty = 0;
 	if (!is_vectorized()){
-		if (!dc_scalar.lookup(a)){
+		if (!dc_scalar.lookup(a, dcs_penalty)){
 		  inc_dmiss(pc);
-		  local_time += dc_scalar.penalty();
-		  inc_cycle(pc, dc_scalar.penalty());
+		  local_time += dcs_penalty;
+		  inc_cycle(pc, dcs_penalty);
 		} 
-	} else {
+	} /*else {
 		if (!dc_vector.lookup(a)) {
 		  inc_dmiss(pc);
 		  local_time += dc_vector.penalty();
 		  inc_cycle(pc, dc_vector.penalty());
 		 }
-  }
+  	}*/
   return a;
 }
 
 inline long mem_t::store_model(long a, long pc)
 {
+	int dcs_penalty = 0;
 	if (!is_vectorized()) {
-		if (!dc_scalar.lookup(a, true)) {
+		if (!dc_scalar.lookup(a, dcs_penalty)) {
 		  inc_dmiss(pc);
-		  local_time += dc_scalar.penalty();
-		  inc_cycle(pc, dc_scalar.penalty());
+		  local_time += dcs_penalty;
+		  inc_cycle(pc, dcs_penalty);
 		}
-	} else {
+	} /*else {
 		if (!dc_vector.lookup(a, true)) {
 		  inc_dmiss(pc);
 		  local_time += dc_vector.penalty();
 		  inc_cycle(pc, dc_vector.penalty());
 		}
-	}
+	}*/
   return a;
 }
 
 inline void mem_t::amo_model(long a, long pc)
 {
+	int dcs_penalty = 0;
 	if (!is_vectorized()) {
-		if (!dc_scalar.lookup(a, true)) {
+		if (!dc_scalar.lookup(a, dcs_penalty)) {
 		  inc_dmiss(pc);
-		  local_time += dc_scalar.penalty();
-		  inc_cycle(pc, dc_scalar.penalty());
+		  local_time += dcs_penalty;
+		  inc_cycle(pc, dcs_penalty);
 		}
-	} else {
+	} /*else {
 		if (!dc_vector.lookup(a, true)) {
 			inc_dmiss(pc);
 			local_time += dc_vector.penalty();
 			inc_cycle(pc, dc_vector.penalty());
 		}
-	}
+	}*/
 }
 
 class core_t : public mem_t, public hart_t {
@@ -146,7 +168,7 @@ public:
   core_t* next() { return (core_t*)hart_t::next(); }
   mem_t* mem() { return static_cast<mem_t*>(this); }
   cache_t* dcache_scalar() { return mem()->dcache_scalar(); }
-  cache_t* dcache_vector() { return mem()->dcache_vector(); }
+  //cache_t* dcache_vector() { return mem()->dcache_vector(); }
 
   long system_clock() { return global_time; }
   long local_clock() { return mem()->clock(); }
@@ -157,9 +179,11 @@ volatile long core_t::global_time;
 
 mem_t::mem_t(long n)
   : perf_t(n),
-    ic("Instruction", conf_Imiss, conf_Iways, conf_Iline, conf_Irows, false),
-    dc_scalar("Scalar Data",        conf_Dsmiss, conf_Dsways, conf_Dsline, conf_Dsrows, true),
-    dc_vector("Vector Data",        conf_Dvmiss, conf_Dvways, conf_Dvline, conf_Dvrows, true)
+    ic("Instruction", conf_Imiss, conf_Iwb_penalty, conf_Iwbtodram_penalty, conf_Iways, conf_Isets, conf_Irow_size),
+    dc_scalar("Scalar Data", conf_Dsmiss, conf_Dswb_penalty, conf_Dswbtodram_penalty, conf_Dsways, conf_Dssets, conf_Dsrow_size)
+    //dc_vector("Vector Data",conf_Dvmiss, conf_Dvways, conf_Dvline, conf_Dvrows, true)
+    //dc_scalar("Scalar Data",conf_Dsmiss, conf_Dsways, conf_Dsline, conf_Dsrows, true),
+    //ic("Instruction",conf_Imiss, conf_Iways, conf_Iline, conf_Irows, true)
 		 
 {
   local_time = 0;
@@ -169,7 +193,7 @@ void mem_t::print()
 {
   ic.print();
   dc_scalar.print();
-  dc_vector.print();
+  //dc_vector.print();
   //fprintf(stderr, "%d accesses\n", access_num);
 }
 
@@ -266,7 +290,6 @@ int main(int argc, const char* argv[], const char* envp[])
   long sp = initialize_stack(argc, argv, envp);
   core_t* mycpu = new core_t();
   mycpu->write_reg(2, sp);	// x2 is stack pointer
-  
   atexit(exitfunc);
 
 #ifdef DEBUG
@@ -277,9 +300,9 @@ int main(int argc, const char* argv[], const char* envp[])
   action.sa_handler = signal_handler;
   sigaction(SIGSEGV, &action, NULL);
 #endif
-
   while (1) {
     mycpu->interpreter(10000000L);
+    fprintf(stderr, " 4\n");
     double realtime = elapse_time();
     fprintf(stderr, "\r\33[2K%12ld insns %3.1fs %3.1f MIPS IPC", core_t::total_count(), realtime, core_t::total_count()/1e6/realtime);
     char separator = '=';
